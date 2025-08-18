@@ -2,6 +2,9 @@
 
 Eine moderne, mobile-friendly Arbeitszeiterfassungs-App mit lokaler SQLite-Datenbank und Docker-Support.
 
+<img width="558" height="946" alt="image" src="https://github.com/user-attachments/assets/fe327bf0-ac92-4e18-ab8f-d11b27e5714f" />
+
+
 ## ✨ Features
 
 - **⏱️ Timer-Funktion**: Start/Stop Timer für Projekte
