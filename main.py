@@ -19,7 +19,13 @@ app = FastAPI(title="Zeiterfassung CATS")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-DATABASE_URL = "sqlite:///./zeiterfassung.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./zeiterfassung.db")
+
+# Ensure data directory exists
+import pathlib
+db_path = pathlib.Path(DATABASE_URL.replace("sqlite:///", ""))
+db_path.parent.mkdir(parents=True, exist_ok=True)
+
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -45,7 +51,17 @@ class TimeEntry(Base):
     is_running = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-Base.metadata.create_all(bind=engine)
+def init_database():
+    """Initialize database and create tables if they don't exist"""
+    try:
+        Base.metadata.create_all(bind=engine)
+        print(f"Database initialized at: {DATABASE_URL}")
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+        raise
+
+# Initialize database on startup
+init_database()
 
 def get_db():
     db = SessionLocal()
