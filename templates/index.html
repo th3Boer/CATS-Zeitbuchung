@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CATS - Zeiterfassung</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🐱 CATS</h1>
+        </header>
+        
+        <main>
+            <section class="timer-section">
+                <div class="timer-display" id="timerDisplay">00:00:00</div>
+                
+                <form id="timerForm" class="timer-form">
+                    <div class="project-input-group">
+                        <select id="projectSelect" name="project">
+                            <option value="">Projekt wählen...</option>
+                        </select>
+                        <button type="button" id="addProjectBtn" class="btn-add">+</button>
+                    </div>
+                    <input type="text" id="description" name="description" placeholder="Beschreibung">
+                    
+                    <div class="timer-controls">
+                        <button type="button" id="startBtn" class="btn btn-start">Start</button>
+                        <button type="button" id="stopBtn" class="btn btn-stop" disabled>Stop</button>
+                    </div>
+                </form>
+            </section>
+        
+            <section class="week-nav">
+                <div class="week-nav-header">
+                    <button class="nav-btn" id="prevWeek">‹</button>
+                    <div class="week-info">
+                        <span id="weekDisplay">KW 33</span>
+                        <span id="dateRange">12.08 - 18.08.2024</span>
+                    </div>
+                    <button class="nav-btn" id="nextWeek">›</button>
+                </div>
+                
+                <div class="week-calendar" id="weekCalendar">
+                    <!-- Wird dynamisch befüllt -->
+                </div>
+            </section>
+            
+            <div id="projectModal" class="modal">
+                <div class="modal-content">
+                    <h3>Neues Projekt</h3>
+                    <input type="text" id="newProjectName" placeholder="Projektname">
+                    <div class="color-input-group">
+                        <input type="color" id="newProjectColor" value="#667eea">
+                        <div class="color-preview" id="colorPreview"></div>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="saveProject" class="btn btn-save">Speichern</button>
+                        <button id="cancelProject" class="btn btn-cancel">Abbrechen</button>
+                    </div>
+                </div>
+            </div>
+
+
+            <section class="actions-section">
+                <button class="btn btn-manual" onclick="timeTracker.toggleManualEntry()">+ Manuell</button>
+                <button class="btn btn-export" onclick="timeTracker.exportCSV()">Export</button>
+                <button class="btn btn-projects" onclick="timeTracker.showProjectsModal()">Projekte bearbeiten</button>
+            </section>
+
+            <div id="manualModal" class="modal">
+                <div class="modal-content">
+                    <h3 id="manualModalTitle">Manueller Eintrag</h3>
+                    <form id="manualForm">
+                        <select id="manualProjectSelect">
+                            <option value="">Projekt wählen...</option>
+                        </select>
+                        <input type="text" id="manualDescription" placeholder="Beschreibung">
+                        <input type="date" id="manualDate">
+                        <div class="time-inputs">
+                            <input type="time" id="manualStartTime">
+                            <span>bis</span>
+                            <input type="time" id="manualEndTime">
+                        </div>
+                        <div class="modal-actions">
+                            <button type="submit" class="btn btn-save" id="saveManualBtn">Speichern</button>
+                            <button type="button" id="cancelManual" class="btn btn-cancel">Abbrechen</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <section class="entries-section">
+                <div class="entries-header">
+                    <div class="day-filter-buttons">
+                        <button class="day-btn active" data-day="">Alle</button>
+                        <button class="day-btn" data-day="0">Mo</button>
+                        <button class="day-btn" data-day="1">Di</button>
+                        <button class="day-btn" data-day="2">Mi</button>
+                        <button class="day-btn" data-day="3">Do</button>
+                        <button class="day-btn" data-day="4">Fr</button>
+                    </div>
+                </div>
+                <div id="entriesList" class="entries-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <div id="projectsModal" class="modal">
+        <div class="modal-content">
+            <h3>Projekte bearbeiten</h3>
+            <div id="projectsList" class="projects-list"></div>
+            <div class="modal-actions">
+                <button id="closeProjectsBtn" class="btn btn-cancel">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification hidden"></div>
+
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/auto-refresh.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
