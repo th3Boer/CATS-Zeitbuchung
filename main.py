@@ -19,11 +19,13 @@ app = FastAPI(title="Zeiterfassung CATS")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./zeiterfassung.db")
+# Use absolute path for database
+DB_PATH = os.path.join("/app", "data", "zeiterfassung.db")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
 
 # Ensure data directory exists
 import pathlib
-db_path = pathlib.Path(DATABASE_URL.replace("sqlite:///", ""))
+db_path = pathlib.Path(DB_PATH)
 db_path.parent.mkdir(parents=True, exist_ok=True)
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -54,8 +56,20 @@ class TimeEntry(Base):
 def init_database():
     """Initialize database and create tables if they don't exist"""
     try:
+        print(f"Database URL: {DATABASE_URL}")
+        print(f"Database path: {DB_PATH}")
+        print(f"Current working directory: {os.getcwd()}")
+        
         Base.metadata.create_all(bind=engine)
-        print(f"Database initialized at: {DATABASE_URL}")
+        
+        # Check if file was actually created
+        if os.path.exists(DB_PATH):
+            print(f"✓ Database file created successfully at: {DB_PATH}")
+            file_size = os.path.getsize(DB_PATH)
+            print(f"  File size: {file_size} bytes")
+        else:
+            print(f"✗ Database file NOT found at: {DB_PATH}")
+            
     except Exception as e:
         print(f"Error initializing database: {e}")
         raise
