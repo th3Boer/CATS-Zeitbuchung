@@ -139,24 +139,6 @@ CATS/
 - `GET /api/projects` - Projekte verwalten
 - `WebSocket /ws` - Live-Updates
 
-## 🔧 Konfiguration
-
-### Umgebungsvariablen
-- `DATABASE_URL`: SQLite Database Pfad (Standard: `sqlite:///./data/zeiterfassung.db`)
-
-### Development
-Für lokale Entwicklung mit automatischem Reload:
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-## 🤝 Contributing
-
-1. Fork das Repository
-2. Feature Branch erstellen (`git checkout -b feature/AmazingFeature`)
-3. Changes committen (`git commit -m 'Add AmazingFeature'`)
-4. Branch pushen (`git push origin feature/AmazingFeature`)
-5. Pull Request öffnen
 
 ## 🔒 Datenschutz
 
