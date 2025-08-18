@@ -606,6 +606,7 @@ h2 {
     background: #f8f9fa;
     border-radius: 6px;
     border: 1px solid #e1e1e1;
+    height: 620px;
 }
 
 .time-header-space {
@@ -624,19 +625,20 @@ h2 {
 }
 
 .time-slot {
-    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 0.6rem;
     color: #666;
     border-bottom: 1px solid #e1e1e1;
-    padding: 8px 1px;
-    min-height: 32px;
+    padding: 2px 1px;
+    height: calc(544px / 17);
+    box-sizing: border-box;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     background: white;
+    flex-shrink: 0;
 }
 
 .time-slot:last-child {
@@ -739,17 +741,19 @@ h2 {
 }
 
 .drag-time-indicator {
-    position: fixed;
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: bold;
-    z-index: 200;
-    pointer-events: none;
-    white-space: nowrap;
-    transform: translate(10px, -50%);
+    position: fixed !important;
+    background: rgba(0, 0, 0, 0.9) !important;
+    color: white !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    font-size: 12px !important;
+    font-weight: bold !important;
+    z-index: 2147483647 !important;
+    pointer-events: none !important;
+    white-space: nowrap !important;
+    transform: translate(10px, -50%) !important;
+    display: block !important;
+    visibility: visible !important;
 }
 
 .drag-time-indicator::after {
@@ -814,6 +818,7 @@ h2 {
     
     .time-sidebar {
         border-radius: 4px;
+        height: 500px;
     }
     
     .time-header-space {
@@ -827,8 +832,10 @@ h2 {
     
     .time-slot {
         font-size: 0.5rem;
-        padding: 4px 1px;
-        min-height: 20px;
+        padding: 1px;
+        height: calc(440px / 17);
+        box-sizing: border-box;
+        flex-shrink: 0;
     }
     
     .calendar-day {

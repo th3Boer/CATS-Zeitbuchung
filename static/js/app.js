@@ -66,6 +66,8 @@ class TimeTracker {
         this.dragIndicator = null;
         this.draggedElement = null;
         this.currentDragData = null;
+        this.longClickTimer = null;
+        this.longClickStartPos = null;
     }
     
     bindEvents() {
@@ -285,15 +287,169 @@ class TimeTracker {
     
     showDragIndicator(x, y, startTime, endTime, draggedElement) {
         const indicator = this.createDragIndicator();
-        indicator.style.display = 'block';
-        indicator.style.visibility = 'visible';
         
-        // Always use mouse position but position higher above cursor
-        indicator.style.left = (x - 50) + 'px'; // Centered (50px = half indicator width)
-        indicator.style.top = (y - 60) + 'px'; // Higher above cursor
+        // Remove from current parent if exists
+        if (indicator.parentNode) {
+            indicator.parentNode.removeChild(indicator);
+        }
+        
+        // Set all styles directly
+        indicator.style.cssText = `
+            position: fixed !important;
+            display: block !important;
+            visibility: visible !important;
+            z-index: 2147483647 !important;
+            background: rgba(0, 0, 0, 0.9) !important;
+            color: white !important;
+            padding: 8px 12px !important;
+            border-radius: 6px !important;
+            font-size: 12px !important;
+            font-weight: bold !important;
+            pointer-events: none !important;
+            white-space: nowrap !important;
+            left: ${x - 50}px !important;
+            top: ${y - 60}px !important;
+            transform: translate(10px, -50%) !important;
+        `;
         
         const timeText = `${this.formatTimeFromHour(startTime)} - ${this.formatTimeFromHour(endTime)}`;
         indicator.textContent = timeText;
+        
+        // Append to body as last element
+        document.body.appendChild(indicator);
+        
+        // Force reflow to ensure it's rendered
+        indicator.offsetHeight;
+    }
+    
+    addLongClickToTimeline(timeline, dayDate) {
+        let longClickTimer = null;
+        let startPos = null;
+        
+        // Mouse events
+        timeline.addEventListener('mousedown', (e) => {
+            // Only handle left mouse button and ignore if clicking on time-block
+            if (e.button !== 0 || e.target.classList.contains('time-block')) {
+                return;
+            }
+            
+            startPos = { x: e.clientX, y: e.clientY };
+            longClickTimer = setTimeout(() => {
+                this.createEntryAtPosition(timeline, dayDate, e.clientY);
+            }, 800); // 800ms long click
+        });
+        
+        timeline.addEventListener('mouseup', (e) => {
+            if (longClickTimer) {
+                clearTimeout(longClickTimer);
+                longClickTimer = null;
+            }
+        });
+        
+        timeline.addEventListener('mousemove', (e) => {
+            if (longClickTimer && startPos) {
+                // Cancel if mouse moved too much
+                const distance = Math.sqrt(
+                    Math.pow(e.clientX - startPos.x, 2) + 
+                    Math.pow(e.clientY - startPos.y, 2)
+                );
+                if (distance > 10) {
+                    clearTimeout(longClickTimer);
+                    longClickTimer = null;
+                }
+            }
+        });
+        
+        timeline.addEventListener('mouseleave', (e) => {
+            if (longClickTimer) {
+                clearTimeout(longClickTimer);
+                longClickTimer = null;
+            }
+        });
+        
+        // Touch events
+        timeline.addEventListener('touchstart', (e) => {
+            // Ignore if touching time-block
+            if (e.target.classList.contains('time-block')) {
+                return;
+            }
+            
+            const touch = e.touches[0];
+            startPos = { x: touch.clientX, y: touch.clientY };
+            longClickTimer = setTimeout(() => {
+                this.createEntryAtPosition(timeline, dayDate, touch.clientY);
+            }, 800); // 800ms long click
+        });
+        
+        timeline.addEventListener('touchend', (e) => {
+            if (longClickTimer) {
+                clearTimeout(longClickTimer);
+                longClickTimer = null;
+            }
+        });
+        
+        timeline.addEventListener('touchmove', (e) => {
+            if (longClickTimer && startPos) {
+                const touch = e.touches[0];
+                // Cancel if finger moved too much
+                const distance = Math.sqrt(
+                    Math.pow(touch.clientX - startPos.x, 2) + 
+                    Math.pow(touch.clientY - startPos.y, 2)
+                );
+                if (distance > 10) {
+                    clearTimeout(longClickTimer);
+                    longClickTimer = null;
+                }
+            }
+        });
+    }
+    
+    createEntryAtPosition(timeline, dayDate, clickY) {
+        const timelineRect = timeline.getBoundingClientRect();
+        const relativeY = clickY - timelineRect.top;
+        const timelineHeight = timelineRect.height;
+        
+        // Calculate time based on position (6:00 to 22:00)
+        const hourPercent = relativeY / timelineHeight;
+        const clickHour = 6 + (hourPercent * 17); // 6-22 hours (17 slots)
+        
+        // Round to 15-minute intervals
+        const roundedStartHour = this.roundToQuarterHour(clickHour);
+        const startHour = Math.max(6, Math.min(21.75, roundedStartHour)); // Ensure within bounds
+        
+        // Set default 1-hour duration
+        const endHour = Math.min(22, startHour + 1);
+        
+        // Create start and end times
+        const startDate = new Date(dayDate);
+        startDate.setHours(Math.floor(startHour));
+        startDate.setMinutes((startHour % 1) * 60);
+        startDate.setSeconds(0);
+        startDate.setMilliseconds(0);
+        
+        const endDate = new Date(dayDate);
+        endDate.setHours(Math.floor(endHour));
+        endDate.setMinutes((endHour % 1) * 60);
+        endDate.setSeconds(0);
+        endDate.setMilliseconds(0);
+        
+        // Pre-fill the manual entry form
+        this.currentEditingEntryId = null;
+        this.manualModalTitle.textContent = 'Neuer Eintrag';
+        this.saveManualBtn.textContent = 'Speichern';
+        
+        this.manualDate.value = startDate.toISOString().split('T')[0];
+        this.manualStartTime.value = startDate.toTimeString().slice(0, 5);
+        this.manualEndTime.value = endDate.toTimeString().slice(0, 5);
+        this.manualDescription.value = '';
+        this.manualProjectSelect.value = '';
+        
+        this.manualModal.classList.add('show');
+        
+        // Don't auto-focus on mobile to prevent dropdown opening
+        if (!/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            this.manualProjectSelect.focus();
+        }
     }
     
     showProjectsModal() {
@@ -471,6 +627,10 @@ class TimeTracker {
                 </div>
                 <div class="day-timeline" id="day-timeline-${i}"></div>
             `;
+            
+            // Add long-click functionality to timeline
+            const timeline = dayDiv.querySelector('.day-timeline');
+            this.addLongClickToTimeline(timeline, currentDay);
             
             // Add drop zone events
             dayDiv.addEventListener('dragover', (e) => {
@@ -1045,7 +1205,7 @@ class TimeTracker {
                 
                 const duration = Math.round(entry.duration_minutes || 0);
                 const shortText = entry.project.length > 6 ? entry.project.substring(0, 6) + '...' : entry.project;
-                timeBlock.textContent = duration > 15 ? `${shortText}\n${duration}m` : shortText;
+                timeBlock.textContent = shortText;
                 timeBlock.title = `${entry.project}: ${startTime.toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})} - ${endTime.toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})} (${duration} Min)${entry.description ? '\n' + entry.description : ''}`;
                 
                 // Make draggable
@@ -1062,11 +1222,13 @@ class TimeTracker {
                     this.draggedElement = timeBlock;
                     this.currentDragData = entry;
                     
-                    // Show initial indicator
-                    const originalStart = new Date(entry.start_time);
-                    const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
-                    const endHour = startHour + (entry.duration_minutes / 60);
-                    this.showDragIndicator(e.clientX, e.clientY, startHour, endHour, timeBlock);
+                    // Show initial indicator with delay to ensure it appears after drag image
+                    setTimeout(() => {
+                        const originalStart = new Date(entry.start_time);
+                        const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
+                        const endHour = startHour + (entry.duration_minutes / 60);
+                        this.showDragIndicator(e.clientX, e.clientY, startHour, endHour, timeBlock);
+                    }, 10);
                 });
                 
                 timeBlock.addEventListener('drag', (e) => {
