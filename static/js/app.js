@@ -69,6 +69,7 @@ class TimeTracker {
         this.longClickTimer = null;
         this.longClickStartPos = null;
         this.dragIndicatorCleanupTimer = null;
+        this.isDragging = false;
     }
     
     bindEvents() {
@@ -425,9 +426,16 @@ class TimeTracker {
     }
     
     setupZoomPrevention() {
-        // Prevent double-tap zoom
+        // Prevent double-tap zoom - but only on non-draggable elements
         let lastTouchEnd = 0;
         document.addEventListener('touchend', (e) => {
+            // Don't prevent touchend on draggable elements
+            if (e.target.classList.contains('time-block') || 
+                e.target.closest('.time-block') ||
+                this.isDragging) {
+                return;
+            }
+            
             const now = new Date().getTime();
             if (now - lastTouchEnd <= 300) {
                 e.preventDefault();
@@ -1409,67 +1417,68 @@ class TimeTracker {
                 // Add touch events for mobile drag support
                 let touchStartY = null;
                 let touchStartX = null;
-                let isDragging = false;
+                let isLocalDragging = false;
                 let longTouchTimer = null;
+                let currentTouch = null;
                 
                 timeBlock.addEventListener('touchstart', (e) => {
                     // Don't prevent default initially to allow scrolling
                     const touch = e.touches[0];
                     touchStartX = touch.clientX;
                     touchStartY = touch.clientY;
-                    isDragging = false;
+                    currentTouch = touch;
+                    isLocalDragging = false;
                     
                     // Start long touch timer for drag initiation
                     longTouchTimer = setTimeout(() => {
-                        isDragging = true;
+                        isLocalDragging = true;
+                        this.isDragging = true; // Set global flag
                         timeBlock.classList.add('dragging');
                         this.draggedElement = timeBlock;
                         this.currentDragData = entry;
                         
-                        // Show drag indicator
+                        // Show drag indicator with current touch position
                         const originalStart = new Date(entry.start_time);
                         const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
                         const endHour = startHour + (entry.duration_minutes / 60);
                         this.showDragIndicator(touchStartX, touchStartY, startHour, endHour, timeBlock);
-                    }, 500); // 500ms for drag initiation
+                        
+                        // Add haptic feedback if available
+                        if (navigator.vibrate) {
+                            navigator.vibrate(50);
+                        }
+                    }, 300); // Reduced to 300ms for faster response
                 });
                 
                 timeBlock.addEventListener('touchmove', (e) => {
+                    currentTouch = e.touches[0];
+                    
                     if (longTouchTimer) {
-                        const touch = e.touches[0];
-                        const deltaX = Math.abs(touch.clientX - touchStartX);
-                        const deltaY = Math.abs(touch.clientY - touchStartY);
+                        const deltaX = Math.abs(currentTouch.clientX - touchStartX);
+                        const deltaY = Math.abs(currentTouch.clientY - touchStartY);
                         
                         // Allow vertical scrolling if primarily vertical movement
-                        if (!isDragging && deltaY > deltaX && deltaY > 10) {
+                        if (!isLocalDragging && deltaY > deltaX && deltaY > 10) {
                             clearTimeout(longTouchTimer);
                             longTouchTimer = null;
                             return; // Allow scrolling
                         }
                         
                         // Cancel long touch if moved too much horizontally
-                        if (!isDragging && deltaX > 15) {
+                        if (!isLocalDragging && deltaX > 15) {
                             clearTimeout(longTouchTimer);
                             longTouchTimer = null;
                             return;
                         }
                     }
                     
-                    if (isDragging) {
+                    if (isLocalDragging) {
                         e.preventDefault(); // Only prevent scrolling during active drag
-                        const touch = e.touches[0];
                         
-                        // Update drag indicator position
-                        if (this.currentDragData) {
-                            const originalStart = new Date(this.currentDragData.start_time);
-                            const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
-                            const endHour = startHour + (this.currentDragData.duration_minutes / 60);
-                            this.showDragIndicator(touch.clientX, touch.clientY, startHour, endHour, timeBlock);
-                        }
-                        
-                        // Highlight drop targets
-                        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                        // Find which calendar day we're over
+                        const elementBelow = document.elementFromPoint(currentTouch.clientX, currentTouch.clientY);
                         const dayDiv = elementBelow?.closest('.calendar-day');
+                        const timeline = dayDiv?.querySelector('.day-timeline');
                         
                         // Remove previous highlights
                         document.querySelectorAll('.drop-target').forEach(el => {
@@ -1478,6 +1487,30 @@ class TimeTracker {
                         
                         if (dayDiv && dayDiv !== timeBlock.closest('.calendar-day')) {
                             dayDiv.classList.add('drop-target');
+                        }
+                        
+                        // Calculate new time based on current touch position and show it
+                        if (timeline && this.currentDragData) {
+                            const timelineRect = timeline.getBoundingClientRect();
+                            const dropY = currentTouch.clientY - timelineRect.top;
+                            const timelineHeight = timelineRect.height;
+                            const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
+                            const newStartHour = 6 + (hourPercent * 17); // 6-22 hours (17 slots)
+                            
+                            // Round to 15-minute intervals
+                            const roundedStartHour = this.roundToQuarterHour(newStartHour);
+                            const durationHours = this.currentDragData.duration_minutes / 60;
+                            const clampedStartHour = Math.max(6, Math.min(22 - durationHours, roundedStartHour));
+                            const clampedEndHour = clampedStartHour + durationHours;
+                            
+                            // Show updated time indicator
+                            this.showDragIndicator(currentTouch.clientX, currentTouch.clientY, clampedStartHour, clampedEndHour, timeBlock);
+                        } else if (this.currentDragData) {
+                            // Show original time if not over a valid drop zone
+                            const originalStart = new Date(this.currentDragData.start_time);
+                            const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
+                            const endHour = startHour + (this.currentDragData.duration_minutes / 60);
+                            this.showDragIndicator(currentTouch.clientX, currentTouch.clientY, startHour, endHour, timeBlock);
                         }
                     }
                 });
@@ -1488,9 +1521,9 @@ class TimeTracker {
                         longTouchTimer = null;
                     }
                     
-                    if (isDragging) {
+                    if (isLocalDragging) {
                         e.preventDefault();
-                        const touch = e.changedTouches[0];
+                        const touch = e.changedTouches[0] || currentTouch;
                         const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
                         const dayDiv = elementBelow?.closest('.calendar-day');
                         
@@ -1501,7 +1534,7 @@ class TimeTracker {
                                 const timelineRect = timeline.getBoundingClientRect();
                                 const dropY = touch.clientY - timelineRect.top;
                                 const timelineHeight = timelineRect.height;
-                                const hourPercent = dropY / timelineHeight;
+                                const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
                                 const newStartHour = 6 + (hourPercent * 17);
                                 
                                 // Round to 15-minute intervals
@@ -1533,7 +1566,9 @@ class TimeTracker {
                         });
                         this.draggedElement = null;
                         this.currentDragData = null;
-                        isDragging = false;
+                        this.isDragging = false; // Reset global flag
+                        isLocalDragging = false;
+                        currentTouch = null;
                     }
                 });
                 
@@ -1545,8 +1580,15 @@ class TimeTracker {
                     
                     // Cleanup on touch cancel
                     timeBlock.classList.remove('dragging');
-                    this.forceCleanupDragIndicators();
-                    isDragging = false;
+                    this.hideDragIndicator();
+                    document.querySelectorAll('.drop-target').forEach(el => {
+                        el.classList.remove('drop-target');
+                    });
+                    this.draggedElement = null;
+                    this.currentDragData = null;
+                    this.isDragging = false; // Reset global flag
+                    isLocalDragging = false;
+                    currentTouch = null;
                 });
                 
                 // Add click event for editing

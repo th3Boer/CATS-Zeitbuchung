@@ -761,9 +761,11 @@ h2 {
 }
 
 .time-block.dragging {
-    opacity: 0.8;
+    opacity: 0.9;
     z-index: 100;
-    box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+    box-shadow: 0 12px 24px rgba(0,0,0,0.6);
+    transform: scale(1.05);
+    border: 2px solid #fff;
 }
 
 .calendar-day.drop-target {
