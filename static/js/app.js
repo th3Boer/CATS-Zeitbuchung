@@ -546,7 +546,7 @@ class TimeTracker {
                     const dropY = currentTouch.clientY - timelineRect.top;
                     const timelineHeight = timelineRect.height;
                     const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
-                    const newStartHour = 6 + (hourPercent * 17);
+                    const newStartHour = 6 + (hourPercent * 16);
                     
                     // Round to 15-minute intervals
                     const roundedStartHour = this.roundToQuarterHour(newStartHour);
@@ -631,7 +631,7 @@ class TimeTracker {
                     const dropY = e.clientY - timelineRect.top;
                     const timelineHeight = timelineRect.height;
                     const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
-                    const newStartHour = 6 + (hourPercent * 17);
+                    const newStartHour = 6 + (hourPercent * 16);
                     
                     // Round to 15-minute intervals
                     const roundedStartHour = this.roundToQuarterHour(newStartHour);
@@ -797,7 +797,7 @@ class TimeTracker {
         
         // Calculate time based on position (6:00 to 22:00)
         const hourPercent = relativeY / timelineHeight;
-        const clickHour = 6 + (hourPercent * 17); // 6-22 hours (17 slots)
+        const clickHour = 6 + (hourPercent * 16); // 6-22 hours (16 hours)
         
         // Round to 15-minute intervals
         const roundedStartHour = this.roundToQuarterHour(clickHour);
@@ -1039,7 +1039,7 @@ class TimeTracker {
                     
                     const timelineHeight = timelineRect.height;
                     const hourPercent = dropY / timelineHeight;
-                    const newStartHour = 6 + (hourPercent * 17); // 6-22 hours (17 slots)
+                    const newStartHour = 6 + (hourPercent * 16); // 6-22 hours (16 hours)
                     
                     // Round to 15-minute intervals
                     const roundedStartHour = this.roundToQuarterHour(newStartHour);
@@ -1086,7 +1086,7 @@ class TimeTracker {
                     
                     const timelineHeight = timelineRect.height;
                     const hourPercent = dropY / timelineHeight;
-                    const newStartHour = 6 + (hourPercent * 17); // 6-22 hours (17 slots)
+                    const newStartHour = 6 + (hourPercent * 16); // 6-22 hours (16 hours)
                     
                     // Round to 15-minute intervals
                     const roundedStartHour = this.roundToQuarterHour(newStartHour);
@@ -1556,10 +1556,10 @@ class TimeTracker {
         const projectColors = new Map();
         let colorIndex = 1;
         
-        // Timeline represents 6:00 to 22:00 (17 hour slots total)
+        // Timeline represents 6:00 to 22:00 (16 hours total)
         const TIMELINE_START_HOUR = 6;
         const TIMELINE_END_HOUR = 22;
-        const TIMELINE_HOURS = 17; // 17 time slots: 6:00, 7:00, 8:00, ..., 22:00
+        const TIMELINE_HOURS = 16; // 6:00 to 22:00 = 16 hours (22 - 6 = 16)
         
         sortedEntries.forEach((entry, index) => {
             const startTime = new Date(entry.start_time);

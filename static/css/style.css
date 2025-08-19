@@ -644,7 +644,7 @@ h2 {
     color: #666;
     border-bottom: 1px solid #e1e1e1;
     padding: 2px 1px;
-    height: calc(544px / 17);
+    height: calc(544px / 16);
     box-sizing: border-box;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -717,9 +717,9 @@ h2 {
     background-image: repeating-linear-gradient(
         to bottom,
         transparent 0px,
-        transparent calc(544px / 17 - 1px),
-        #e1e1e1 calc(544px / 17 - 1px),
-        #e1e1e1 calc(544px / 17)
+        transparent calc(544px / 16 - 1px),
+        #e1e1e1 calc(544px / 16 - 1px),
+        #e1e1e1 calc(544px / 16)
     );
     /* Prevent text selection during drag operations */
     -webkit-user-select: none;
@@ -866,7 +866,7 @@ h2 {
     .time-slot {
         font-size: 0.5rem;
         padding: 1px;
-        height: calc(440px / 17);
+        height: calc(440px / 16);
         box-sizing: border-box;
         flex-shrink: 0;
     }
@@ -908,9 +908,9 @@ h2 {
         background-image: repeating-linear-gradient(
             to bottom,
             transparent 0px,
-            transparent calc(440px / 17 - 1px),
-            #e1e1e1 calc(440px / 17 - 1px),
-            #e1e1e1 calc(440px / 17)
+            transparent calc(440px / 16 - 1px),
+            #e1e1e1 calc(440px / 16 - 1px),
+            #e1e1e1 calc(440px / 16)
         );
     }
     
