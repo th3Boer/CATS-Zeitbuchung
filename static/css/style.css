@@ -752,7 +752,9 @@ h2 {
     -webkit-touch-callout: none;
     /* Prevent all touch behaviors for draggable time blocks */
     touch-action: none;
-    margin-bottom: 1px;
+    /* Improve rendering precision */
+    box-sizing: border-box;
+    will-change: transform;
 }
 
 .time-block:hover {

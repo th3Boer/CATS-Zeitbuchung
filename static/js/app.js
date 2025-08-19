@@ -1573,15 +1573,20 @@ class TimeTracker {
             const clampedStartHour = Math.max(6.0, Math.min(TIMELINE_END_HOUR, startHour));
             const clampedEndHour = Math.max(6.0, Math.min(TIMELINE_END_HOUR, endHour));
             
-            // Calculate position and height as percentage of timeline
+            // Calculate position and height as percentage of timeline with higher precision
             const topPercent = ((clampedStartHour - TIMELINE_START_HOUR) / TIMELINE_HOURS) * 100;
             const heightPercent = ((clampedEndHour - clampedStartHour) / TIMELINE_HOURS) * 100;
             
             if (heightPercent > 0) {
                 const timeBlock = document.createElement('div');
                 timeBlock.className = 'time-block';
-                timeBlock.style.top = `${topPercent}%`;
-                timeBlock.style.height = `${Math.max(heightPercent, 2)}%`; // Minimum 2% height
+                
+                // Use precise decimal values to avoid rounding errors
+                const preciseTop = Math.round(topPercent * 100) / 100;
+                const preciseHeight = Math.round(Math.max(heightPercent, 1.25) * 100) / 100;
+                
+                timeBlock.style.top = `${preciseTop}%`;
+                timeBlock.style.height = `${preciseHeight}%`;
                 timeBlock.dataset.entryId = entry.id;
                 
                 // Use project's defined color
