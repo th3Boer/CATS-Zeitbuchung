@@ -68,6 +68,7 @@ class TimeTracker {
         this.currentDragData = null;
         this.longClickTimer = null;
         this.longClickStartPos = null;
+        this.dragIndicatorCleanupTimer = null;
     }
     
     bindEvents() {
@@ -114,6 +115,23 @@ class TimeTracker {
                 this.forceCleanupDragIndicators();
             }
         });
+        
+        // Global drag cleanup - catch any missed drag end scenarios
+        document.addEventListener('dragend', () => this.forceCleanupDragIndicators());
+        document.addEventListener('drop', () => this.forceCleanupDragIndicators());
+        
+        // Handle escape key to cancel drag
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.forceCleanupDragIndicators();
+            }
+        });
+        
+        // Handle mouse leave from window
+        document.addEventListener('mouseleave', () => this.forceCleanupDragIndicators());
+        
+        // MutationObserver to watch for orphaned drag indicators
+        this.setupDragIndicatorWatcher();
         
         // Close modals on outside click
         this.projectModal.addEventListener('click', (e) => {
@@ -302,18 +320,42 @@ class TimeTracker {
     }
     
     forceCleanupDragIndicators() {
+        // Clear any existing cleanup timer
+        if (this.dragIndicatorCleanupTimer) {
+            clearTimeout(this.dragIndicatorCleanupTimer);
+            this.dragIndicatorCleanupTimer = null;
+        }
+        
         // Remove any remaining drag indicators from the DOM
         document.querySelectorAll('.drag-time-indicator').forEach(indicator => {
             if (indicator.parentNode) {
                 indicator.parentNode.removeChild(indicator);
             }
         });
+        
+        // Remove drop target highlights
+        document.querySelectorAll('.drop-target').forEach(el => {
+            el.classList.remove('drop-target');
+        });
+        
+        // Remove dragging class from any elements
+        document.querySelectorAll('.dragging').forEach(el => {
+            el.classList.remove('dragging');
+        });
+        
         // Reset drag state
         this.draggedElement = null;
         this.currentDragData = null;
+        this.dragIndicator = null;
     }
     
     showDragIndicator(x, y, startTime, endTime, draggedElement) {
+        // Clear any existing cleanup timer when showing indicator
+        if (this.dragIndicatorCleanupTimer) {
+            clearTimeout(this.dragIndicatorCleanupTimer);
+            this.dragIndicatorCleanupTimer = null;
+        }
+        
         const indicator = this.createDragIndicator();
         
         // Remove from current parent if exists
@@ -348,6 +390,47 @@ class TimeTracker {
         
         // Force reflow to ensure it's rendered
         indicator.offsetHeight;
+        
+        // Set a safety timeout to automatically cleanup after 10 seconds
+        this.dragIndicatorCleanupTimer = setTimeout(() => {
+            this.forceCleanupDragIndicators();
+        }, 10000);
+    }
+    
+    setupDragIndicatorWatcher() {
+        // Create a MutationObserver to watch for orphaned drag indicators
+        const observer = new MutationObserver((mutations) => {
+            let foundOrphanedIndicators = false;
+            
+            // Check if any drag-time-indicator elements exist without active drag
+            const indicators = document.querySelectorAll('.drag-time-indicator');
+            if (indicators.length > 0 && !this.currentDragData && !this.draggedElement) {
+                foundOrphanedIndicators = true;
+            }
+            
+            if (foundOrphanedIndicators) {
+                // Delay cleanup to avoid interference with ongoing operations
+                setTimeout(() => {
+                    if (!this.currentDragData && !this.draggedElement) {
+                        this.forceCleanupDragIndicators();
+                    }
+                }, 100);
+            }
+        });
+        
+        // Start observing
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        // Periodic cleanup check every 5 seconds as fallback
+        setInterval(() => {
+            const indicators = document.querySelectorAll('.drag-time-indicator');
+            if (indicators.length > 0 && !this.currentDragData && !this.draggedElement) {
+                this.forceCleanupDragIndicators();
+            }
+        }, 5000);
     }
     
     addLongClickToTimeline(timeline, dayDate) {
