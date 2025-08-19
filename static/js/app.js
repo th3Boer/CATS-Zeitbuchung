@@ -70,6 +70,7 @@ class TimeTracker {
         this.longClickStartPos = null;
         this.dragIndicatorCleanupTimer = null;
         this.isDragging = false;
+        this.isTouchDevice = this.detectTouchDevice();
     }
     
     bindEvents() {
@@ -456,6 +457,244 @@ class TimeTracker {
                 e.preventDefault();
             }
         });
+    }
+    
+    detectTouchDevice() {
+        return (('ontouchstart' in window) ||
+                (navigator.maxTouchPoints > 0) ||
+                (navigator.msMaxTouchPoints > 0));
+    }
+    
+    addTouchDragEvents(timeBlock, entry) {
+        let touchStartY = null;
+        let touchStartX = null;
+        let isLocalDragging = false;
+        let longTouchTimer = null;
+        let currentTouch = null;
+        
+        timeBlock.addEventListener('touchstart', (e) => {
+            // Don't prevent default initially to allow scrolling
+            const touch = e.touches[0];
+            touchStartX = touch.clientX;
+            touchStartY = touch.clientY;
+            currentTouch = touch;
+            isLocalDragging = false;
+            
+            // Start long touch timer for drag initiation
+            longTouchTimer = setTimeout(() => {
+                isLocalDragging = true;
+                this.isDragging = true;
+                timeBlock.classList.add('dragging');
+                this.draggedElement = timeBlock;
+                this.currentDragData = entry;
+                
+                // Show drag indicator with current touch position
+                const originalStart = new Date(entry.start_time);
+                const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
+                const endHour = startHour + (entry.duration_minutes / 60);
+                this.showDragIndicator(touchStartX, touchStartY, startHour, endHour, timeBlock);
+                
+                // Add haptic feedback if available
+                if (navigator.vibrate) {
+                    navigator.vibrate(50);
+                }
+            }, 300);
+        });
+        
+        timeBlock.addEventListener('touchmove', (e) => {
+            currentTouch = e.touches[0];
+            
+            if (longTouchTimer) {
+                const deltaX = Math.abs(currentTouch.clientX - touchStartX);
+                const deltaY = Math.abs(currentTouch.clientY - touchStartY);
+                
+                // Allow vertical scrolling if primarily vertical movement
+                if (!isLocalDragging && deltaY > deltaX && deltaY > 10) {
+                    clearTimeout(longTouchTimer);
+                    longTouchTimer = null;
+                    return;
+                }
+                
+                // Cancel long touch if moved too much horizontally
+                if (!isLocalDragging && deltaX > 15) {
+                    clearTimeout(longTouchTimer);
+                    longTouchTimer = null;
+                    return;
+                }
+            }
+            
+            if (isLocalDragging) {
+                e.preventDefault();
+                
+                // Find which calendar day we're over
+                const elementBelow = document.elementFromPoint(currentTouch.clientX, currentTouch.clientY);
+                const dayDiv = elementBelow?.closest('.calendar-day');
+                const timeline = dayDiv?.querySelector('.day-timeline');
+                
+                // Remove previous highlights
+                document.querySelectorAll('.drop-target').forEach(el => {
+                    el.classList.remove('drop-target');
+                });
+                
+                if (dayDiv && dayDiv !== timeBlock.closest('.calendar-day')) {
+                    dayDiv.classList.add('drop-target');
+                }
+                
+                // Calculate new time based on current touch position and show it
+                if (timeline && this.currentDragData) {
+                    const timelineRect = timeline.getBoundingClientRect();
+                    const dropY = currentTouch.clientY - timelineRect.top;
+                    const timelineHeight = timelineRect.height;
+                    const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
+                    const newStartHour = 6 + (hourPercent * 17);
+                    
+                    // Round to 15-minute intervals
+                    const roundedStartHour = this.roundToQuarterHour(newStartHour);
+                    const durationHours = this.currentDragData.duration_minutes / 60;
+                    const clampedStartHour = Math.max(6, Math.min(22 - durationHours, roundedStartHour));
+                    const clampedEndHour = clampedStartHour + durationHours;
+                    
+                    // Show updated time indicator
+                    this.showDragIndicator(currentTouch.clientX, currentTouch.clientY, clampedStartHour, clampedEndHour, timeBlock);
+                } else if (this.currentDragData) {
+                    // Show original time if not over a valid drop zone
+                    const originalStart = new Date(this.currentDragData.start_time);
+                    const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
+                    const endHour = startHour + (this.currentDragData.duration_minutes / 60);
+                    this.showDragIndicator(currentTouch.clientX, currentTouch.clientY, startHour, endHour, timeBlock);
+                }
+            }
+        });
+        
+        timeBlock.addEventListener('touchend', (e) => {
+            if (longTouchTimer) {
+                clearTimeout(longTouchTimer);
+                longTouchTimer = null;
+            }
+            
+            if (isLocalDragging) {
+                e.preventDefault();
+                const touch = e.changedTouches[0] || currentTouch;
+                const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                const dayDiv = elementBelow?.closest('.calendar-day');
+                
+                if (dayDiv && dayDiv !== timeBlock.closest('.calendar-day')) {
+                    this.performDrop(dayDiv, touch, timeBlock);
+                }
+                
+                this.cleanupDrag(timeBlock);
+                isLocalDragging = false;
+                currentTouch = null;
+            }
+        });
+        
+        timeBlock.addEventListener('touchcancel', (e) => {
+            if (longTouchTimer) {
+                clearTimeout(longTouchTimer);
+                longTouchTimer = null;
+            }
+            
+            this.cleanupDrag(timeBlock);
+            isLocalDragging = false;
+            currentTouch = null;
+        });
+    }
+    
+    addNativeDragEvents(timeBlock, entry) {
+        timeBlock.addEventListener('dragstart', (e) => {
+            timeBlock.classList.add('dragging');
+            e.dataTransfer.setData('text/plain', JSON.stringify(entry));
+            e.dataTransfer.effectAllowed = 'move';
+            
+            this.draggedElement = timeBlock;
+            this.currentDragData = entry;
+            this.isDragging = true;
+            
+            // Show initial indicator with delay
+            setTimeout(() => {
+                const originalStart = new Date(entry.start_time);
+                const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
+                const endHour = startHour + (entry.duration_minutes / 60);
+                this.showDragIndicator(e.clientX, e.clientY, startHour, endHour, timeBlock);
+            }, 10);
+        });
+        
+        timeBlock.addEventListener('drag', (e) => {
+            if (this.draggedElement && this.currentDragData && e.clientX > 0 && e.clientY > 0) {
+                // Find which calendar day we're over for dynamic time calculation
+                const elementBelow = document.elementFromPoint(e.clientX, e.clientY);
+                const dayDiv = elementBelow?.closest('.calendar-day');
+                const timeline = dayDiv?.querySelector('.day-timeline');
+                
+                if (timeline && this.currentDragData) {
+                    const timelineRect = timeline.getBoundingClientRect();
+                    const dropY = e.clientY - timelineRect.top;
+                    const timelineHeight = timelineRect.height;
+                    const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
+                    const newStartHour = 6 + (hourPercent * 17);
+                    
+                    // Round to 15-minute intervals
+                    const roundedStartHour = this.roundToQuarterHour(newStartHour);
+                    const durationHours = this.currentDragData.duration_minutes / 60;
+                    const clampedStartHour = Math.max(6, Math.min(22 - durationHours, roundedStartHour));
+                    const clampedEndHour = clampedStartHour + durationHours;
+                    
+                    // Show updated time indicator
+                    this.showDragIndicator(e.clientX, e.clientY, clampedStartHour, clampedEndHour, timeBlock);
+                } else {
+                    // Show original time if not over a valid drop zone
+                    const originalStart = new Date(this.currentDragData.start_time);
+                    const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
+                    const endHour = startHour + (this.currentDragData.duration_minutes / 60);
+                    this.showDragIndicator(e.clientX, e.clientY, startHour, endHour, timeBlock);
+                }
+            }
+        });
+        
+        timeBlock.addEventListener('dragend', () => {
+            this.cleanupDrag(timeBlock);
+        });
+    }
+    
+    performDrop(dayDiv, pointer, timeBlock) {
+        const timeline = dayDiv.querySelector('.day-timeline');
+        if (timeline && this.currentDragData) {
+            const timelineRect = timeline.getBoundingClientRect();
+            const dropY = pointer.clientY - timelineRect.top;
+            const timelineHeight = timelineRect.height;
+            const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
+            const newStartHour = 6 + (hourPercent * 17);
+            
+            // Round to 15-minute intervals
+            const roundedStartHour = this.roundToQuarterHour(newStartHour);
+            const durationHours = this.currentDragData.duration_minutes / 60;
+            const clampedStartHour = Math.max(6, Math.min(22 - durationHours, roundedStartHour));
+            
+            // Calculate new date
+            const startOfWeek = this.getDateOfWeek(this.currentYear, this.currentWeek);
+            const dayIndex = Array.from(dayDiv.parentNode.children).indexOf(dayDiv) - 1;
+            const newDate = new Date(startOfWeek.getTime() + dayIndex * 24 * 60 * 60 * 1000);
+            newDate.setHours(Math.floor(clampedStartHour));
+            newDate.setMinutes((clampedStartHour % 1) * 60);
+            newDate.setSeconds(0);
+            newDate.setMilliseconds(0);
+            
+            const originalDuration = this.currentDragData.duration_minutes || 60;
+            const newEndTime = new Date(newDate.getTime() + originalDuration * 60000);
+            
+            this.moveEntry(this.currentDragData.id, newDate, newEndTime);
+        }
+    }
+    
+    cleanupDrag(timeBlock) {
+        timeBlock.classList.remove('dragging');
+        this.hideDragIndicator();
+        document.querySelectorAll('.drop-target').forEach(el => {
+            el.classList.remove('drop-target');
+        });
+        this.draggedElement = null;
+        this.currentDragData = null;
+        this.isDragging = false;
     }
     
     addLongClickToTimeline(timeline, dayDate) {
@@ -1362,234 +1601,18 @@ class TimeTracker {
                 timeBlock.textContent = shortText;
                 timeBlock.title = `${entry.project}: ${startTime.toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})} - ${endTime.toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'})} (${duration} Min)${entry.description ? '\n' + entry.description : ''}`;
                 
-                // Make draggable
-                timeBlock.draggable = true;
+                // Configure drag behavior based on device type
+                if (this.isTouchDevice) {
+                    // Touch device: disable native drag, use touch events
+                    timeBlock.draggable = false;
+                    this.addTouchDragEvents(timeBlock, entry);
+                } else {
+                    // Desktop: use native drag with enhanced indicator
+                    timeBlock.draggable = true;
+                    this.addNativeDragEvents(timeBlock, entry);
+                }
+                
                 timeBlock.dataset.entryData = JSON.stringify(entry);
-                
-                // Add drag and drop events
-                timeBlock.addEventListener('dragstart', (e) => {
-                    timeBlock.classList.add('dragging');
-                    e.dataTransfer.setData('text/plain', JSON.stringify(entry));
-                    e.dataTransfer.effectAllowed = 'move';
-                    
-                    // Store reference to dragged element
-                    this.draggedElement = timeBlock;
-                    this.currentDragData = entry;
-                    
-                    // Show initial indicator with delay to ensure it appears after drag image
-                    setTimeout(() => {
-                        const originalStart = new Date(entry.start_time);
-                        const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
-                        const endHour = startHour + (entry.duration_minutes / 60);
-                        this.showDragIndicator(e.clientX, e.clientY, startHour, endHour, timeBlock);
-                    }, 10);
-                });
-                
-                timeBlock.addEventListener('drag', (e) => {
-                    // Update indicator position during drag
-                    if (this.draggedElement && this.currentDragData && e.clientX > 0 && e.clientY > 0) {
-                        // Show current times during drag - position follows mouse
-                        const originalStart = new Date(this.currentDragData.start_time);
-                        const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
-                        const endHour = startHour + (this.currentDragData.duration_minutes / 60);
-                        
-                        this.showDragIndicator(e.clientX, e.clientY, startHour, endHour, this.draggedElement);
-                    }
-                });
-                
-                timeBlock.addEventListener('dragend', () => {
-                    timeBlock.classList.remove('dragging');
-                    this.hideDragIndicator();
-                    // Force cleanup of any remaining indicators
-                    document.querySelectorAll('.drag-time-indicator').forEach(indicator => {
-                        if (indicator.parentNode) {
-                            indicator.parentNode.removeChild(indicator);
-                        }
-                    });
-                    this.draggedElement = null;
-                    this.currentDragData = null;
-                    // Remove drop target highlights
-                    document.querySelectorAll('.drop-target').forEach(el => {
-                        el.classList.remove('drop-target');
-                    });
-                });
-                
-                // Add touch events for mobile drag support
-                let touchStartY = null;
-                let touchStartX = null;
-                let isLocalDragging = false;
-                let longTouchTimer = null;
-                let currentTouch = null;
-                
-                timeBlock.addEventListener('touchstart', (e) => {
-                    // Don't prevent default initially to allow scrolling
-                    const touch = e.touches[0];
-                    touchStartX = touch.clientX;
-                    touchStartY = touch.clientY;
-                    currentTouch = touch;
-                    isLocalDragging = false;
-                    
-                    // Start long touch timer for drag initiation
-                    longTouchTimer = setTimeout(() => {
-                        isLocalDragging = true;
-                        this.isDragging = true; // Set global flag
-                        timeBlock.classList.add('dragging');
-                        this.draggedElement = timeBlock;
-                        this.currentDragData = entry;
-                        
-                        // Show drag indicator with current touch position
-                        const originalStart = new Date(entry.start_time);
-                        const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
-                        const endHour = startHour + (entry.duration_minutes / 60);
-                        this.showDragIndicator(touchStartX, touchStartY, startHour, endHour, timeBlock);
-                        
-                        // Add haptic feedback if available
-                        if (navigator.vibrate) {
-                            navigator.vibrate(50);
-                        }
-                    }, 300); // Reduced to 300ms for faster response
-                });
-                
-                timeBlock.addEventListener('touchmove', (e) => {
-                    currentTouch = e.touches[0];
-                    
-                    if (longTouchTimer) {
-                        const deltaX = Math.abs(currentTouch.clientX - touchStartX);
-                        const deltaY = Math.abs(currentTouch.clientY - touchStartY);
-                        
-                        // Allow vertical scrolling if primarily vertical movement
-                        if (!isLocalDragging && deltaY > deltaX && deltaY > 10) {
-                            clearTimeout(longTouchTimer);
-                            longTouchTimer = null;
-                            return; // Allow scrolling
-                        }
-                        
-                        // Cancel long touch if moved too much horizontally
-                        if (!isLocalDragging && deltaX > 15) {
-                            clearTimeout(longTouchTimer);
-                            longTouchTimer = null;
-                            return;
-                        }
-                    }
-                    
-                    if (isLocalDragging) {
-                        e.preventDefault(); // Only prevent scrolling during active drag
-                        
-                        // Find which calendar day we're over
-                        const elementBelow = document.elementFromPoint(currentTouch.clientX, currentTouch.clientY);
-                        const dayDiv = elementBelow?.closest('.calendar-day');
-                        const timeline = dayDiv?.querySelector('.day-timeline');
-                        
-                        // Remove previous highlights
-                        document.querySelectorAll('.drop-target').forEach(el => {
-                            el.classList.remove('drop-target');
-                        });
-                        
-                        if (dayDiv && dayDiv !== timeBlock.closest('.calendar-day')) {
-                            dayDiv.classList.add('drop-target');
-                        }
-                        
-                        // Calculate new time based on current touch position and show it
-                        if (timeline && this.currentDragData) {
-                            const timelineRect = timeline.getBoundingClientRect();
-                            const dropY = currentTouch.clientY - timelineRect.top;
-                            const timelineHeight = timelineRect.height;
-                            const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
-                            const newStartHour = 6 + (hourPercent * 17); // 6-22 hours (17 slots)
-                            
-                            // Round to 15-minute intervals
-                            const roundedStartHour = this.roundToQuarterHour(newStartHour);
-                            const durationHours = this.currentDragData.duration_minutes / 60;
-                            const clampedStartHour = Math.max(6, Math.min(22 - durationHours, roundedStartHour));
-                            const clampedEndHour = clampedStartHour + durationHours;
-                            
-                            // Show updated time indicator
-                            this.showDragIndicator(currentTouch.clientX, currentTouch.clientY, clampedStartHour, clampedEndHour, timeBlock);
-                        } else if (this.currentDragData) {
-                            // Show original time if not over a valid drop zone
-                            const originalStart = new Date(this.currentDragData.start_time);
-                            const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
-                            const endHour = startHour + (this.currentDragData.duration_minutes / 60);
-                            this.showDragIndicator(currentTouch.clientX, currentTouch.clientY, startHour, endHour, timeBlock);
-                        }
-                    }
-                });
-                
-                timeBlock.addEventListener('touchend', (e) => {
-                    if (longTouchTimer) {
-                        clearTimeout(longTouchTimer);
-                        longTouchTimer = null;
-                    }
-                    
-                    if (isLocalDragging) {
-                        e.preventDefault();
-                        const touch = e.changedTouches[0] || currentTouch;
-                        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-                        const dayDiv = elementBelow?.closest('.calendar-day');
-                        
-                        if (dayDiv && dayDiv !== timeBlock.closest('.calendar-day')) {
-                            // Simulate drop event
-                            const timeline = dayDiv.querySelector('.day-timeline');
-                            if (timeline && this.currentDragData) {
-                                const timelineRect = timeline.getBoundingClientRect();
-                                const dropY = touch.clientY - timelineRect.top;
-                                const timelineHeight = timelineRect.height;
-                                const hourPercent = Math.max(0, Math.min(1, dropY / timelineHeight));
-                                const newStartHour = 6 + (hourPercent * 17);
-                                
-                                // Round to 15-minute intervals
-                                const roundedStartHour = this.roundToQuarterHour(newStartHour);
-                                const durationHours = this.currentDragData.duration_minutes / 60;
-                                const clampedStartHour = Math.max(6, Math.min(22 - durationHours, roundedStartHour));
-                                
-                                // Calculate new date
-                                const startOfWeek = this.getDateOfWeek(this.currentYear, this.currentWeek);
-                                const dayIndex = Array.from(dayDiv.parentNode.children).indexOf(dayDiv) - 1; // -1 for time sidebar
-                                const newDate = new Date(startOfWeek.getTime() + dayIndex * 24 * 60 * 60 * 1000);
-                                newDate.setHours(Math.floor(clampedStartHour));
-                                newDate.setMinutes((clampedStartHour % 1) * 60);
-                                newDate.setSeconds(0);
-                                newDate.setMilliseconds(0);
-                                
-                                const originalDuration = this.currentDragData.duration_minutes || 60;
-                                const newEndTime = new Date(newDate.getTime() + originalDuration * 60000);
-                                
-                                this.moveEntry(this.currentDragData.id, newDate, newEndTime);
-                            }
-                        }
-                        
-                        // Cleanup
-                        timeBlock.classList.remove('dragging');
-                        this.hideDragIndicator();
-                        document.querySelectorAll('.drop-target').forEach(el => {
-                            el.classList.remove('drop-target');
-                        });
-                        this.draggedElement = null;
-                        this.currentDragData = null;
-                        this.isDragging = false; // Reset global flag
-                        isLocalDragging = false;
-                        currentTouch = null;
-                    }
-                });
-                
-                timeBlock.addEventListener('touchcancel', (e) => {
-                    if (longTouchTimer) {
-                        clearTimeout(longTouchTimer);
-                        longTouchTimer = null;
-                    }
-                    
-                    // Cleanup on touch cancel
-                    timeBlock.classList.remove('dragging');
-                    this.hideDragIndicator();
-                    document.querySelectorAll('.drop-target').forEach(el => {
-                        el.classList.remove('drop-target');
-                    });
-                    this.draggedElement = null;
-                    this.currentDragData = null;
-                    this.isDragging = false; // Reset global flag
-                    isLocalDragging = false;
-                    currentTouch = null;
-                });
                 
                 // Add click event for editing
                 timeBlock.addEventListener('click', (e) => {
