@@ -661,6 +661,11 @@ h2 {
     position: relative;
     border: 1px solid #e1e1e1;
     overflow: hidden;
+    /* Prevent text selection during touch interactions */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .calendar-day.today {
@@ -702,6 +707,11 @@ h2 {
         #e1e1e1 calc(544px / 17 - 1px),
         #e1e1e1 calc(544px / 17)
     );
+    /* Prevent text selection during drag operations */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .time-block {
@@ -721,6 +731,9 @@ h2 {
     text-overflow: ellipsis;
     line-height: 1.1;
     user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -webkit-touch-callout: none;
     margin-bottom: 1px;
 }
 

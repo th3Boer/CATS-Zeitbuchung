@@ -282,6 +282,11 @@ class TimeTracker {
     hideDragIndicator() {
         if (this.dragIndicator) {
             this.dragIndicator.style.display = 'none';
+            // Ensure indicator is properly removed from DOM
+            if (this.dragIndicator.parentNode) {
+                this.dragIndicator.parentNode.removeChild(this.dragIndicator);
+            }
+            this.dragIndicator = null;
         }
     }
     
@@ -677,7 +682,14 @@ class TimeTracker {
             dayDiv.addEventListener('drop', (e) => {
                 e.preventDefault();
                 dayDiv.classList.remove('drop-target');
+                // Force hide drag indicator immediately
                 this.hideDragIndicator();
+                // Clear any remaining indicators
+                document.querySelectorAll('.drag-time-indicator').forEach(indicator => {
+                    if (indicator.parentNode) {
+                        indicator.parentNode.removeChild(indicator);
+                    }
+                });
                 
                 if (this.currentDragData) {
                     const timeline = dayDiv.querySelector('.day-timeline');
@@ -1246,6 +1258,12 @@ class TimeTracker {
                 timeBlock.addEventListener('dragend', () => {
                     timeBlock.classList.remove('dragging');
                     this.hideDragIndicator();
+                    // Force cleanup of any remaining indicators
+                    document.querySelectorAll('.drag-time-indicator').forEach(indicator => {
+                        if (indicator.parentNode) {
+                            indicator.parentNode.removeChild(indicator);
+                        }
+                    });
                     this.draggedElement = null;
                     this.currentDragData = null;
                     // Remove drop target highlights
