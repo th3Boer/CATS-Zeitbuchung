@@ -4,12 +4,24 @@
     box-sizing: border-box;
 }
 
+html {
+    /* Prevent zoom on mobile devices */
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+    /* Prevent pinch-to-zoom */
+    touch-action: manipulation;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     color: #333;
     line-height: 1.6;
+    /* Prevent zoom and improve touch behavior */
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
 }
 
 .container {
@@ -666,8 +678,8 @@ h2 {
     -moz-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
-    /* Prevent default touch behaviors */
-    touch-action: none;
+    /* Allow vertical scrolling but prevent pinch-to-zoom */
+    touch-action: pan-y;
 }
 
 .calendar-day.today {
@@ -714,8 +726,8 @@ h2 {
     -moz-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
-    /* Prevent default touch behaviors */
-    touch-action: none;
+    /* Allow vertical scrolling but prevent pinch-to-zoom */
+    touch-action: pan-y;
 }
 
 .time-block {
@@ -738,7 +750,7 @@ h2 {
     -webkit-user-select: none;
     -moz-user-select: none;
     -webkit-touch-callout: none;
-    /* Prevent default touch behaviors for drag and drop */
+    /* Prevent all touch behaviors for draggable time blocks */
     touch-action: none;
     margin-bottom: 1px;
 }

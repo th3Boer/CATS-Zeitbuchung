@@ -116,10 +116,6 @@ class TimeTracker {
             }
         });
         
-        // Global drag cleanup - catch any missed drag end scenarios
-        document.addEventListener('dragend', () => this.forceCleanupDragIndicators());
-        document.addEventListener('drop', () => this.forceCleanupDragIndicators());
-        
         // Handle escape key to cancel drag
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
@@ -127,11 +123,11 @@ class TimeTracker {
             }
         });
         
-        // Handle mouse leave from window
-        document.addEventListener('mouseleave', () => this.forceCleanupDragIndicators());
-        
         // MutationObserver to watch for orphaned drag indicators
         this.setupDragIndicatorWatcher();
+        
+        // Prevent zoom gestures
+        this.setupZoomPrevention();
         
         // Close modals on outside click
         this.projectModal.addEventListener('click', (e) => {
@@ -315,8 +311,12 @@ class TimeTracker {
             }
             this.dragIndicator = null;
         }
-        // Additional cleanup: force remove all drag indicators
-        this.forceCleanupDragIndicators();
+        // Just remove any orphaned drag indicators without resetting drag state
+        document.querySelectorAll('.drag-time-indicator').forEach(indicator => {
+            if (indicator.parentNode) {
+                indicator.parentNode.removeChild(indicator);
+            }
+        });
     }
     
     forceCleanupDragIndicators() {
@@ -333,20 +333,24 @@ class TimeTracker {
             }
         });
         
-        // Remove drop target highlights
-        document.querySelectorAll('.drop-target').forEach(el => {
-            el.classList.remove('drop-target');
-        });
-        
-        // Remove dragging class from any elements
-        document.querySelectorAll('.dragging').forEach(el => {
-            el.classList.remove('dragging');
-        });
-        
-        // Reset drag state
-        this.draggedElement = null;
-        this.currentDragData = null;
-        this.dragIndicator = null;
+        // Only reset drag state if no active drag operation
+        const isDragActive = document.querySelector('.dragging') !== null;
+        if (!isDragActive) {
+            // Remove drop target highlights only if no active drag
+            document.querySelectorAll('.drop-target').forEach(el => {
+                el.classList.remove('drop-target');
+            });
+            
+            // Remove dragging class from any elements
+            document.querySelectorAll('.dragging').forEach(el => {
+                el.classList.remove('dragging');
+            });
+            
+            // Reset drag state only if no active drag
+            this.draggedElement = null;
+            this.currentDragData = null;
+            this.dragIndicator = null;
+        }
     }
     
     showDragIndicator(x, y, startTime, endTime, draggedElement) {
@@ -385,52 +389,65 @@ class TimeTracker {
         const timeText = `${this.formatTimeFromHour(startTime)} - ${this.formatTimeFromHour(endTime)}`;
         indicator.textContent = timeText;
         
+        // Add timestamp for cleanup tracking
+        indicator.dataset.created = Date.now().toString();
+        
         // Append to body as last element
         document.body.appendChild(indicator);
         
         // Force reflow to ensure it's rendered
         indicator.offsetHeight;
         
-        // Set a safety timeout to automatically cleanup after 10 seconds
+        // Set a safety timeout to automatically cleanup after 30 seconds
         this.dragIndicatorCleanupTimer = setTimeout(() => {
             this.forceCleanupDragIndicators();
-        }, 10000);
+        }, 30000);
     }
     
     setupDragIndicatorWatcher() {
-        // Create a MutationObserver to watch for orphaned drag indicators
-        const observer = new MutationObserver((mutations) => {
-            let foundOrphanedIndicators = false;
-            
-            // Check if any drag-time-indicator elements exist without active drag
-            const indicators = document.querySelectorAll('.drag-time-indicator');
-            if (indicators.length > 0 && !this.currentDragData && !this.draggedElement) {
-                foundOrphanedIndicators = true;
-            }
-            
-            if (foundOrphanedIndicators) {
-                // Delay cleanup to avoid interference with ongoing operations
-                setTimeout(() => {
-                    if (!this.currentDragData && !this.draggedElement) {
-                        this.forceCleanupDragIndicators();
-                    }
-                }, 100);
-            }
-        });
-        
-        // Start observing
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true
-        });
-        
-        // Periodic cleanup check every 5 seconds as fallback
+        // Periodic cleanup check every 30 seconds as fallback - much less aggressive
         setInterval(() => {
             const indicators = document.querySelectorAll('.drag-time-indicator');
+            // Only cleanup if no drag is active AND indicators have been there for a while
             if (indicators.length > 0 && !this.currentDragData && !this.draggedElement) {
-                this.forceCleanupDragIndicators();
+                // Add a timestamp check to avoid removing recently created indicators
+                let shouldCleanup = true;
+                indicators.forEach(indicator => {
+                    if (indicator.dataset.created && Date.now() - parseInt(indicator.dataset.created) < 5000) {
+                        shouldCleanup = false;
+                    }
+                });
+                if (shouldCleanup) {
+                    this.forceCleanupDragIndicators();
+                }
             }
-        }, 5000);
+        }, 30000); // Every 30 seconds instead of 5
+    }
+    
+    setupZoomPrevention() {
+        // Prevent double-tap zoom
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', (e) => {
+            const now = new Date().getTime();
+            if (now - lastTouchEnd <= 300) {
+                e.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+        
+        // Prevent wheel zoom (Ctrl+scroll)
+        document.addEventListener('wheel', (e) => {
+            if (e.ctrlKey) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        // Prevent keyboard zoom shortcuts
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '0')) {
+                e.preventDefault();
+            }
+        });
     }
     
     addLongClickToTimeline(timeline, dayDate) {
@@ -1396,7 +1413,7 @@ class TimeTracker {
                 let longTouchTimer = null;
                 
                 timeBlock.addEventListener('touchstart', (e) => {
-                    e.preventDefault(); // Prevent default touch behaviors
+                    // Don't prevent default initially to allow scrolling
                     const touch = e.touches[0];
                     touchStartX = touch.clientX;
                     touchStartY = touch.clientY;
@@ -1413,7 +1430,7 @@ class TimeTracker {
                         const originalStart = new Date(entry.start_time);
                         const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
                         const endHour = startHour + (entry.duration_minutes / 60);
-                        this.showDragIndicator(touch.clientX, touch.clientY, startHour, endHour, timeBlock);
+                        this.showDragIndicator(touchStartX, touchStartY, startHour, endHour, timeBlock);
                     }, 500); // 500ms for drag initiation
                 });
                 
@@ -1423,8 +1440,15 @@ class TimeTracker {
                         const deltaX = Math.abs(touch.clientX - touchStartX);
                         const deltaY = Math.abs(touch.clientY - touchStartY);
                         
-                        // Cancel long touch if moved too much before drag starts
-                        if (!isDragging && (deltaX > 10 || deltaY > 10)) {
+                        // Allow vertical scrolling if primarily vertical movement
+                        if (!isDragging && deltaY > deltaX && deltaY > 10) {
+                            clearTimeout(longTouchTimer);
+                            longTouchTimer = null;
+                            return; // Allow scrolling
+                        }
+                        
+                        // Cancel long touch if moved too much horizontally
+                        if (!isDragging && deltaX > 15) {
                             clearTimeout(longTouchTimer);
                             longTouchTimer = null;
                             return;
@@ -1432,7 +1456,7 @@ class TimeTracker {
                     }
                     
                     if (isDragging) {
-                        e.preventDefault();
+                        e.preventDefault(); // Only prevent scrolling during active drag
                         const touch = e.touches[0];
                         
                         // Update drag indicator position
