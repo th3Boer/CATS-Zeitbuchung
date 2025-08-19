@@ -106,6 +106,15 @@ class TimeTracker {
         
         this.closeProjectsBtn.addEventListener('click', () => this.hideProjectsModal());
         
+        // Global drag indicator cleanup events
+        window.addEventListener('blur', () => this.forceCleanupDragIndicators());
+        window.addEventListener('beforeunload', () => this.forceCleanupDragIndicators());
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                this.forceCleanupDragIndicators();
+            }
+        });
+        
         // Close modals on outside click
         this.projectModal.addEventListener('click', (e) => {
             if (e.target === this.projectModal) this.hideProjectModal();
@@ -288,6 +297,20 @@ class TimeTracker {
             }
             this.dragIndicator = null;
         }
+        // Additional cleanup: force remove all drag indicators
+        this.forceCleanupDragIndicators();
+    }
+    
+    forceCleanupDragIndicators() {
+        // Remove any remaining drag indicators from the DOM
+        document.querySelectorAll('.drag-time-indicator').forEach(indicator => {
+            if (indicator.parentNode) {
+                indicator.parentNode.removeChild(indicator);
+            }
+        });
+        // Reset drag state
+        this.draggedElement = null;
+        this.currentDragData = null;
     }
     
     showDragIndicator(x, y, startTime, endTime, draggedElement) {
@@ -391,6 +414,8 @@ class TimeTracker {
                 clearTimeout(longClickTimer);
                 longClickTimer = null;
             }
+            // Cleanup drag indicators on touch end
+            this.forceCleanupDragIndicators();
         });
         
         timeline.addEventListener('touchmove', (e) => {
@@ -406,6 +431,15 @@ class TimeTracker {
                     longClickTimer = null;
                 }
             }
+        });
+        
+        // Touch cancel cleanup
+        timeline.addEventListener('touchcancel', (e) => {
+            if (longClickTimer) {
+                clearTimeout(longClickTimer);
+                longClickTimer = null;
+            }
+            this.forceCleanupDragIndicators();
         });
     }
     
@@ -1270,6 +1304,142 @@ class TimeTracker {
                     document.querySelectorAll('.drop-target').forEach(el => {
                         el.classList.remove('drop-target');
                     });
+                });
+                
+                // Add touch events for mobile drag support
+                let touchStartY = null;
+                let touchStartX = null;
+                let isDragging = false;
+                let longTouchTimer = null;
+                
+                timeBlock.addEventListener('touchstart', (e) => {
+                    e.preventDefault(); // Prevent default touch behaviors
+                    const touch = e.touches[0];
+                    touchStartX = touch.clientX;
+                    touchStartY = touch.clientY;
+                    isDragging = false;
+                    
+                    // Start long touch timer for drag initiation
+                    longTouchTimer = setTimeout(() => {
+                        isDragging = true;
+                        timeBlock.classList.add('dragging');
+                        this.draggedElement = timeBlock;
+                        this.currentDragData = entry;
+                        
+                        // Show drag indicator
+                        const originalStart = new Date(entry.start_time);
+                        const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
+                        const endHour = startHour + (entry.duration_minutes / 60);
+                        this.showDragIndicator(touch.clientX, touch.clientY, startHour, endHour, timeBlock);
+                    }, 500); // 500ms for drag initiation
+                });
+                
+                timeBlock.addEventListener('touchmove', (e) => {
+                    if (longTouchTimer) {
+                        const touch = e.touches[0];
+                        const deltaX = Math.abs(touch.clientX - touchStartX);
+                        const deltaY = Math.abs(touch.clientY - touchStartY);
+                        
+                        // Cancel long touch if moved too much before drag starts
+                        if (!isDragging && (deltaX > 10 || deltaY > 10)) {
+                            clearTimeout(longTouchTimer);
+                            longTouchTimer = null;
+                            return;
+                        }
+                    }
+                    
+                    if (isDragging) {
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        
+                        // Update drag indicator position
+                        if (this.currentDragData) {
+                            const originalStart = new Date(this.currentDragData.start_time);
+                            const startHour = originalStart.getHours() + originalStart.getMinutes() / 60;
+                            const endHour = startHour + (this.currentDragData.duration_minutes / 60);
+                            this.showDragIndicator(touch.clientX, touch.clientY, startHour, endHour, timeBlock);
+                        }
+                        
+                        // Highlight drop targets
+                        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                        const dayDiv = elementBelow?.closest('.calendar-day');
+                        
+                        // Remove previous highlights
+                        document.querySelectorAll('.drop-target').forEach(el => {
+                            el.classList.remove('drop-target');
+                        });
+                        
+                        if (dayDiv && dayDiv !== timeBlock.closest('.calendar-day')) {
+                            dayDiv.classList.add('drop-target');
+                        }
+                    }
+                });
+                
+                timeBlock.addEventListener('touchend', (e) => {
+                    if (longTouchTimer) {
+                        clearTimeout(longTouchTimer);
+                        longTouchTimer = null;
+                    }
+                    
+                    if (isDragging) {
+                        e.preventDefault();
+                        const touch = e.changedTouches[0];
+                        const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+                        const dayDiv = elementBelow?.closest('.calendar-day');
+                        
+                        if (dayDiv && dayDiv !== timeBlock.closest('.calendar-day')) {
+                            // Simulate drop event
+                            const timeline = dayDiv.querySelector('.day-timeline');
+                            if (timeline && this.currentDragData) {
+                                const timelineRect = timeline.getBoundingClientRect();
+                                const dropY = touch.clientY - timelineRect.top;
+                                const timelineHeight = timelineRect.height;
+                                const hourPercent = dropY / timelineHeight;
+                                const newStartHour = 6 + (hourPercent * 17);
+                                
+                                // Round to 15-minute intervals
+                                const roundedStartHour = this.roundToQuarterHour(newStartHour);
+                                const durationHours = this.currentDragData.duration_minutes / 60;
+                                const clampedStartHour = Math.max(6, Math.min(22 - durationHours, roundedStartHour));
+                                
+                                // Calculate new date
+                                const startOfWeek = this.getDateOfWeek(this.currentYear, this.currentWeek);
+                                const dayIndex = Array.from(dayDiv.parentNode.children).indexOf(dayDiv) - 1; // -1 for time sidebar
+                                const newDate = new Date(startOfWeek.getTime() + dayIndex * 24 * 60 * 60 * 1000);
+                                newDate.setHours(Math.floor(clampedStartHour));
+                                newDate.setMinutes((clampedStartHour % 1) * 60);
+                                newDate.setSeconds(0);
+                                newDate.setMilliseconds(0);
+                                
+                                const originalDuration = this.currentDragData.duration_minutes || 60;
+                                const newEndTime = new Date(newDate.getTime() + originalDuration * 60000);
+                                
+                                this.moveEntry(this.currentDragData.id, newDate, newEndTime);
+                            }
+                        }
+                        
+                        // Cleanup
+                        timeBlock.classList.remove('dragging');
+                        this.hideDragIndicator();
+                        document.querySelectorAll('.drop-target').forEach(el => {
+                            el.classList.remove('drop-target');
+                        });
+                        this.draggedElement = null;
+                        this.currentDragData = null;
+                        isDragging = false;
+                    }
+                });
+                
+                timeBlock.addEventListener('touchcancel', (e) => {
+                    if (longTouchTimer) {
+                        clearTimeout(longTouchTimer);
+                        longTouchTimer = null;
+                    }
+                    
+                    // Cleanup on touch cancel
+                    timeBlock.classList.remove('dragging');
+                    this.forceCleanupDragIndicators();
+                    isDragging = false;
                 });
                 
                 // Add click event for editing
